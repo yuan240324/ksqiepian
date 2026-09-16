@@ -134,7 +134,7 @@ python verify/verify_timeline.py
 
 ## 5. 自动切片
 
-拿到成品 MP4 之后，用 `clipper/` 里的三个脚本自动剪出精彩片段。
+拿到成品 MP4 之后，用 `clipper/` 里的脚本自动剪出精彩片段。
 
 ```powershell
 # 1) 分析全片：找画面突变 + 音频高能量秒（约 12 分钟，只做一次）
@@ -148,10 +148,17 @@ python clipper/make_clips.py
 
 # 4) 校验每一段的音视频是否完好
 python clipper/verify_clips.py
+
+# 5) 清理旧选区残留（改过选区参数后必跑）
+python clipper/clean_clips.py
+
+# 6) 画面查重（两两比缩略图签名，确认无近似重复片段）
+python clipper/check_diversity.py
 ```
 
 打分逻辑：`画面突变幅度` + 附近 `高能量秒数`，另外把连续 3 秒以上的高能量段
-单独作为高权重事件；取窗口时要求起点间隔 ≥ 90s，避免 12 段内容重复。
+单独作为高权重事件；取窗口时要求起点间隔 ≥ 90s，并按 10 分钟分区每区最多选 1 段，
+再加**画面指纹去重**（48x36 灰度签名），防止「同一个商店/大厅界面」被连环选中。
 
 ```text
 ========================================================================
@@ -163,7 +170,7 @@ python clipper/verify_clips.py
   [01] 00:01:51 ~ 00:02:36  (45s, score=1.100)
   [02] 00:05:31 ~ 00:06:16  (45s, score=1.000)
   ...
-  [12] 01:21:20 ~ 01:22:05  (45s, score=0.850)
+  [12] 01:23:44 ~ 01:24:29  (45s, score=0.351)
   [01] clip_01_000151.mp4  v=1381 a=980  9.8 MB
   ...
 完成 12/12，用时 3s
@@ -176,6 +183,13 @@ python clipper/verify_clips.py
 [OK ] clip_02_000531.mp4   8.2MB v= 1381( 46.2s) a=  978( 45.4s) pk=0.907 drift=0.85s
 ...
 files=12  bad=0  total=553s (9.2 min)
+```
+
+画面查重输出（近似重复 0 对 = 12 段画面互不相同）：
+
+```text
+共 12 个缩略图，两两对比中 ...
+对比 66 对: 正常 56 / 相似 10 / 近似重复 0
 ```
 
 详细原理与 4 个 stream-copy 大坑见 [`docs/07-自动切片.md`](docs/07-自动切片.md)。
@@ -213,6 +227,7 @@ m3u8 分片     1293 个
 产出片段      12 段 x 46s = 553s (9.2 min)
 切割耗时      3 秒
 校验          12/12 通过，无静音、无漂移
+画面查重      66 对对比，近似重复 0 对
 ```
 
 ---
@@ -235,7 +250,9 @@ ksqiepian/
 ├── clipper/              自动切片脚本（step 8-10）
 │   ├── analyze.py        抽帧找画面突变 + 按秒算音频能量
 │   ├── make_clips.py     ★ stream-copy 切割（--list 只预览）
-│   └── verify_clips.py   逐段校验音视频
+│   ├── verify_clips.py   逐段校验音视频
+│   ├── clean_clips.py    清理旧选区残留
+│   └── check_diversity.py 缩略图两两查重
 ├── verify/               完整性验证脚本
 │   ├── verify_full.py
 │   ├── verify_audio.py

@@ -20,6 +20,9 @@ import os
 import sys
 import time
 
+import numpy as np
+from PIL import Image
+
 SRC = r"G:\trea\切片\快手直播回放_YyXx-828924_20260916.mp4"
 ANALYSIS = r"C:\Users\weido\.trae-cn\work\6aaa8ef0b3e31b7643bdb0d0\analysis.json"
 OUTDIR = r"G:\trea\切片\clips"
@@ -29,7 +32,10 @@ CLIP_LEN = 45.0        # target clip length in seconds
 PRE_ROLL = 6.0         # seconds of lead-in before a detected event
 MIN_GAP = 90.0         # minimum distance between two clip start points
 MAX_CLIPS = 12         # cap on number of clips
-TOP_N_EVENTS = 40      # how many candidate events to consider
+TOP_N_EVENTS = 60      # how many candidate events to consider
+MAX_PER_ZONE = 1       # at most this many clips per ZONE_SEC block
+ZONE_SEC = 600.0       # 10-minute zone used to spread clips across the stream
+DUP_FRAME_DIFF = 0.04  # frame-signature diff below this = visually same screen
 
 
 def load_analysis():
@@ -37,43 +43,105 @@ def load_analysis():
         return json.load(f)
 
 
-def pick_windows(report):
-    """Score events and turn them into non-overlapping clip windows."""
+def _frame_signature(src, sec):
+    """Decode one frame near `sec` and return a tiny grayscale signature.
+
+    Used to reject windows that land on the same static screen (shop /
+    inventory / lobby) even when they sit in different zones.
+    """
+    c = av.open(src)
+    vst = next(s for s in c.streams if s.type == "video")
+    dur = float(vst.duration * vst.time_base) if vst.duration else 0.0
+    sec = min(max(0.0, sec), max(0.0, dur - 0.5))
+    c.seek(int(sec / vst.time_base), stream=vst)
+    sig = None
+    for fr in c.decode(vst):
+        nd = fr.to_ndarray(format="gray")
+        h, w = nd.shape
+        sig = Image.fromarray(nd[::max(1, h // 36), ::max(1, w // 48)])
+        break
+    c.close()
+    if sig is None:
+        return np.zeros((36, 48), dtype=np.float32)
+    return np.asarray(sig.resize((48, 36)), dtype=np.float32) / 255.0
+
+
+def pick_windows(report, src=SRC):
+    """Score events and turn them into non-overlapping clip windows.
+
+    Strategy: keep at most the best event per ZONE_SEC block, and reject any
+    candidate whose frame signature is too close to an already-picked window.
+    A single long static screen (shop / inventory / settings) can emit several
+    high-diff "scene changes" or loud runs minutes apart that all look
+    identical; zoning + signature dedup forces the selection to cover visually
+    distinct moments across the whole stream instead.
+    """
     dur = report["duration_sec"]
     scenes = report.get("scene_changes", [])
     loud = set(report.get("loud_seconds", []))
 
+    # ── build candidate events ──────────────────────────────────────
     events = []
+
+    # (a) scene changes, boosted by nearby loud seconds
     for sc in scenes:
         s = sc["sec"]
         near_loud = sum(1 for k in range(int(s) - 2, int(s) + 3) if k in loud)
-        score = sc["diff"] * 1.0 + near_loud * 0.25
-        events.append((score, s))
+        events.append((sc["diff"] * 1.0 + near_loud * 0.25, s))
 
+    # (b) sustained loud runs (>=3s) - the strongest signal of a real peak
     loud_sorted = sorted(loud)
     run = []
+    runs = []
     for s in loud_sorted:
         if run and s - run[-1] <= 1:
             run.append(s)
         else:
             if len(run) >= 3:
-                events.append((0.6 + 0.05 * len(run), run[0] + len(run) / 2.0))
+                runs.append(run)
             run = [s]
     if len(run) >= 3:
-        events.append((0.6 + 0.05 * len(run), run[0] + len(run) / 2.0))
+        runs.append(run)
+    for r in runs:
+        events.append((0.6 + 0.05 * len(r), r[0] + len(r) / 2.0))
 
     events.sort(key=lambda x: -x[0])
 
+    # ── pick best event per zone, avoiding same-looking screens ────
     windows = []
-    for score, ev in events[:TOP_N_EVENTS]:
+    used_zones = set()
+    sigs = []
+
+    def try_pick(score, ev, check_zone=True):
         start = max(0.0, ev - PRE_ROLL)
         end = min(dur, start + CLIP_LEN)
         start = max(0.0, end - CLIP_LEN)
         if any(abs(start - w[0]) < MIN_GAP for w in windows):
-            continue
+            return False
+        if check_zone:
+            zone = int(start // ZONE_SEC)
+            if zone in used_zones and MAX_PER_ZONE <= 1:
+                return False
+        sg = _frame_signature(src, start + CLIP_LEN * 0.5)
+        if sigs and min(float(np.abs(sg - s).mean()) for s in sigs) < DUP_FRAME_DIFF:
+            return False
         windows.append((start, end, round(score, 3)))
+        if check_zone:
+            used_zones.add(zone)
+        sigs.append(sg)
+        return True
+
+    for score, ev in events:
         if len(windows) >= MAX_CLIPS:
             break
+        try_pick(score, ev)
+
+    # ── backfill if zoning left us short (zone cap ignored here) ────
+    if len(windows) < MAX_CLIPS:
+        for score, ev in events:
+            if len(windows) >= MAX_CLIPS:
+                break
+            try_pick(score, ev, check_zone=False)
 
     windows.sort(key=lambda x: x[0])
     return windows
@@ -208,7 +276,6 @@ def main():
     for i, (s, e, sc) in enumerate(windows, 1):
         print("  [%02d] %s ~ %s  (%.0fs, score=%.3f)"
               % (i, fmt(s), fmt(e), e - s, sc))
-
     if list_only or not windows:
         print("\n(仅预览，未切割)")
         return
