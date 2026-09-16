@@ -154,6 +154,9 @@ python clipper/clean_clips.py
 
 # 6) 画面查重（两两比缩略图签名，确认无近似重复片段）
 python clipper/check_diversity.py
+
+# 7) 给某段加文字：标题条 + 飘屏弹幕 + 结尾卡片（重编码）
+python clipper/overlay_text.py
 ```
 
 打分逻辑：`画面突变幅度` + 附近 `高能量秒数`，另外把连续 3 秒以上的高能量段
@@ -252,7 +255,8 @@ ksqiepian/
 │   ├── make_clips.py     ★ stream-copy 切割（--list 只预览）
 │   ├── verify_clips.py   逐段校验音视频
 │   ├── clean_clips.py    清理旧选区残留
-│   └── check_diversity.py 缩略图两两查重
+│   ├── check_diversity.py 缩略图两两查重
+│   └── overlay_text.py   片段叠加标题条/弹幕/结尾卡片（重编码）
 ├── verify/               完整性验证脚本
 │   ├── verify_full.py
 │   ├── verify_audio.py
