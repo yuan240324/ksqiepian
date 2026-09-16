@@ -62,6 +62,43 @@ python -m pip install -i https://pypi.tuna.tsinghua.edu.cn/simple av
 
 ## 4. 快速开始
 
+### 4.1 一键跑通（推荐）
+
+`ks_extract/run_pipeline.py` 把 step 1-4 + step 6 串成了一条命令：
+
+```powershell
+python ks_extract/run_pipeline.py "##X56ZfKJb622Z1i7##" "G:\ksrec\replay"
+```
+
+输入可以是**分享口令 / 短链 / 裸 token** 三种任一形态。脚本会自动解析、抓页、
+挑选 `GameAvcHd` 高清源、多线程下载、拼接、重封装，最后打印验证命令。
+
+```text
+[19:31:02] step1 解析口令/短链 ...
+[19:31:03]   从口令提取 token = X56ZfKJb622Z1i7
+[19:31:04]   FINAL = https://v.kuaishou.com/fw/playback/1499544558?...
+[19:31:04]   回放 ID = 1499544558
+[19:31:04]   已确认 subBiz=LIVE_PLAYBACK（直播回放）
+[19:31:05] step2 抓取回放页 ...
+[19:31:06]   HTML 147478 bytes -> G:\ksrec\replay\playback_body.html
+[19:31:06] step3 提取并挑选 m3u8 ...
+[19:31:06]   找到 5 条唯一 m3u8
+[19:31:06]     [5] dur=86.1 min clarity=...
+[19:31:06]  选中: .../JsQSVN0Ra3Q_GameAvcHdL1Lto...m3u8
+[19:31:07] step4 下载分片 ...
+[19:31:07]   manifest 172045 bytes, 1293 分片
+...
+[19:35:41]  完成 1293/1293，失败 0，共 944.4 MB
+[19:35:42]  首片 TS sync 抽检 = 50/50
+[19:35:45] step5 二进制拼接 ...
+[19:35:48]  拼接 1293 片 -> G:\ksrec\replay\merged.ts (944.4 MB, 3s)
+[19:35:48]  拼接结果 TS sync 抽检 = 20/20
+[19:35:49] step6 PyAV 透传重封装 ...
+[19:35:57]   DONE v=154916 a=111235 8s -> 901.2 MB
+```
+
+### 4.2 分步执行（便于排障）
+
 ```powershell
 # 1) 解析口令 / 短链
 python ks_extract/resolve_ks.py "https://v.kuaishou.com/f/X56ZfKJb622Z1i7"
@@ -124,17 +161,20 @@ ksqiepian/
 ├── README.md
 ├── docs/                 说明文档
 ├── ks_extract/           提取链路脚本（step 1-4, 6）
+│   ├── run_pipeline.py   ★ 一键跑通（推荐入口）
 │   ├── resolve_ks.py
 │   ├── extract_playback.py
 │   ├── pick_replay.py
 │   ├── dl_replay.py
 │   ├── remux_full.py
-│   └── inspect_ts.py
+│   ├── inspect_ts.py
+│   └── test_dl.py
 ├── verify/               完整性验证脚本
 │   ├── verify_full.py
 │   ├── verify_audio.py
 │   └── verify_timeline.py
-└── scripts_ps/           拼接用的 PowerShell 脚本
+├── scripts_ps/           拼接 / 排障用的 PowerShell 脚本
+└── config.example.ini    一次真实运行的完整参数（复现对照用）
 ```
 
 ---
