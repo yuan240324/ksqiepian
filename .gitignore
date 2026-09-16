@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 抓取产物（体积大，不入库）
+segs/
+merged.ts
+*.ts
+*.mp4
+*.mp2
+playback_body.html
+apollo.json
+initial.json
+
+# 运行时缓存
+replay_list.json
+*.log
+*.part
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
