@@ -256,6 +256,37 @@ python pro_edit/render_pro.py <raw.mp4> <out.mp4> <plan.json>
 mux EINVAL 修复（pts 量化到 1/30 网格）等见
 [`docs/08-快手三风格切片.md`](docs/08-快手三风格切片.md)。
 
+### 6.3 第三版：pro_edit/render_native.py（原比例版）
+
+需求："**带标题 + 稍微加点字 + 比例用原版**"——不做 9:16 裁切，输出尺寸直接
+取素材流宽高，保留素材自身黑边与平台栏。文字量提升到**中等**：标题 + 分段小标题 + 花字。
+
+```powershell
+python pro_edit/check_native.py          # 先预检三条 plan（不渲染）
+python pro_edit/render_native.py <raw.mp4> <out.mp4> <plan.json>
+```
+
+新增能力：
+
+| 能力 | 说明 |
+| --- | --- |
+| 分段小标题 `segments` | 左侧红底色块 + 金色描边大字，从左侧滑入，对应"第一回合 装镇定"这类分节 |
+| 底部比例定位 `cy_off` | 字幕/跑马灯/时间戳改为按画面高度比例定位，避免顶出画面外 |
+| 安全区预检 `check_native.py` | 把素材自带黑边/平台栏变成硬约束，渲染前断言拦截越界文字 |
+
+原比例版成品（**不裁切**，保持素材原始分辨率）：
+
+| 成品 | 风格 | 输出尺寸 | 片长 | 大小 |
+| --- | --- | --- | --- | --- |
+| 01_综艺花字版_原比例 | 综艺花字 | 1440x1800 | 34.0s | 41.6 MB |
+| 02_解说盘点版_原比例 | 解说盘点 | 1280x960 | 34.0s | 21.0 MB |
+| 03_土味老铁版_原比例 | 土味老铁 | 1280x960 | 31.0s | 17.6 MB |
+
+原比例输出的关键坑：**素材自带的平台 UI 会跟自绘文字打架**。竖屏素材右侧
+1280~1440 共 160px 是纯黑、顶部约 96px 是状态栏，所以所有元素都要往左收、
+往下让，靠 `check_native.py` 在渲染前拦下越界。详见
+[`docs/08-快手三风格切片.md`](docs/08-快手三风格切片.md) 5.3 节。
+
 ---
 
 ## 7. 文档
@@ -305,6 +336,14 @@ m3u8 分片     1293 个
 构图          模糊带 30~58% → 1.5%（裁满屏）
 混音          orig/bgm/sfx 三段，峰值归一化 0.840
 渲染耗时      约 4 分钟 / 条（veryfast, crf=20）
+── 三风格成片 v3 原比例版（2026-09-17）──
+综艺花字版    9/13 笑场   34.0s  1020 帧  41.6 MB  1440x1800
+解说盘点版    9/16 团战   34.0s  1020 帧  21.0 MB  1280x960
+土味老铁版    9/16 社死   31.0s   930 帧  17.6 MB  1280x960
+输出规格      素材原始分辨率（不裁切）@ 30fps  H.264 + AAC
+安全区        竖屏右侧 160px 纯黑、顶部 96px 平台栏 → 预检拦截
+混音          orig/bgm/sfx 三段，峰值归一化 0.840
+渲染耗时      约 17 分钟 / 三条
 ```
 
 ---
@@ -337,8 +376,10 @@ ksqiepian/
 │   ├── cfg_commentary.json 解说盘点风配置
 │   ├── cfg_rustic.json   土味老铁风配置
 │   └── sheet.py          帧目录 → 联系表（成片核对用）
-├── pro_edit/             快手成片包装 v2 增强版（step 12）
-│   ├── render_pro.py     ★ 节拍驱动渲染器（裁满屏构图）
+├── pro_edit/             快手成片包装 v2 增强版 / v3 原比例版（step 12）
+│   ├── render_pro.py     ★ v2 节拍驱动渲染器（裁满屏构图）
+│   ├── render_native.py  ★ v3 原比例渲染器（不裁切 + 分段小标题）
+│   ├── check_native.py   v3 安全区预检（渲染前拦截越界）
 │   ├── sfx.py            音效合成库（8 种）
 │   ├── audiomix.py       混音器（原声闪避 + BGM + 音效）
 │   ├── vfx.py            视觉特效（震屏/推近/闪白/暗角/调色）
@@ -346,7 +387,10 @@ ksqiepian/
 │   ├── grab_frames.py    抽帧核对工具
 │   ├── plan_variety.json 综艺风编排
 │   ├── plan_commentary.json 解说风编排
-│   └── plan_rustic.json  土味风编排
+│   ├── plan_rustic.json  土味风编排
+│   ├── plan_n_variety.json   综艺风原比例编排（含 segments）
+│   ├── plan_n_commentary.json 解说风原比例编排
+│   └── plan_n_rustic.json    土味风原比例编排
 ├── verify/               完整性验证脚本
 │   ├── verify_full.py
 │   ├── verify_audio.py

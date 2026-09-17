@@ -126,6 +126,23 @@ def vignette(img, strength=0.30, cy=0.0, chh=1.0):
     return Image.composite(dark, img, alpha)
 
 
+def vignette_mask(size, strength=0.30):
+    """生成可复用的暗角 RGBA 叠加层，直接用 alpha_composite 叠加。"""
+    if strength <= 0.004:
+        return None
+    w, h = size
+    import numpy as np
+    yy, xx = np.mgrid[0:h, 0:w]
+    cx, yc = w / 2.0, h / 2.0
+    r = np.sqrt(((xx - cx) / cx) ** 2 + ((yy - yc) / yc) ** 2)
+    m = np.clip((r - 0.58) / 0.72, 0, 1) ** 1.5
+    alpha = Image.fromarray((m * 255).astype("uint8"), "L").point(
+        lambda v: int(v * strength))
+    overlay = Image.new("RGBA", size, (0, 0, 0, 0))
+    overlay.putalpha(alpha)
+    return overlay
+
+
 def saturate(img, k=1.12):
     """提高饱和度，让画面更"跳"。"""
     if abs(k - 1.0) < 0.01:
