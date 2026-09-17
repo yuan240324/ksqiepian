@@ -264,7 +264,7 @@ def style_commentary(img, t, cfg, geo):
 
 
 # ----------------------------------------------------------------- rustic
-def banner(img, center, txt, fnt, scale, angle=-2.5):
+def banner(img, center, txt, fnt, scale, angle=-2.5, max_w=None):
     if scale <= 0.03:
         return
     d0 = ImageDraw.Draw(Image.new("RGB", (8, 8)))
@@ -272,7 +272,17 @@ def banner(img, center, txt, fnt, scale, angle=-2.5):
     tw, th = b[2] - b[0], b[3] - b[1]
     pad = 28
     w, h = tw + 2 * pad, th + 2 * pad
-    lay = Image.new("RGBA", (w + 90, h + 60), (0, 0, 0, 0))
+    # 横条 + 星标的总宽，超出安全宽度时先整体缩小（避免文字溢出边框）
+    total_w = w + 90
+    if max_w and total_w > max_w:
+        rf = max_w / float(total_w)
+        nsz = max(24, int(fnt.size * rf))
+        fnt = font(fnt.path if hasattr(fnt, "path") else F_HEI, nsz)
+        b = d0.textbbox((0, 0), txt, font=fnt, stroke_width=6)
+        tw, th = b[2] - b[0], b[3] - b[1]
+        w, h = tw + 2 * pad, th + 2 * pad
+        total_w = w + 90
+    lay = Image.new("RGBA", (max(1, total_w), h + 60), (0, 0, 0, 0))
     ld = ImageDraw.Draw(lay)
     ld.rounded_rectangle([45, 30, 45 + w, 30 + h], radius=22,
                          fill=(214, 32, 32, 244), outline=(255, 255, 255), width=5)
@@ -280,9 +290,10 @@ def banner(img, center, txt, fnt, scale, angle=-2.5):
             fill=(0, 0, 0, 130), stroke_width=6, stroke_fill=(110, 16, 16, 130))
     ld.text((45 + pad - b[0], 30 + pad - b[1]), txt, font=fnt,
             fill=(255, 232, 80), stroke_width=6, stroke_fill=(255, 255, 255))
-    sf = font(F_HEI, 54)
-    ld.text((6, 30 + h / 2 - 34), "★", font=sf, fill=(255, 214, 50))
-    ld.text((45 + w - 56, 30 + h / 2 - 34), "★", font=sf, fill=(255, 214, 50))
+    sf = font(F_HEI, max(30, int(h * 0.52)))
+    ld.text((6, 30 + h / 2 - sf.size * 0.62), "★", font=sf, fill=(255, 214, 50))
+    ld.text((45 + w - sf.size * 1.05, 30 + h / 2 - sf.size * 0.62), "★", font=sf,
+            fill=(255, 214, 50))
     lay = lay.rotate(angle, expand=True, resample=Image.BICUBIC)
     if abs(scale - 1.0) > 0.01:
         lay = lay.resize((max(1, int(lay.width * scale)),
@@ -291,8 +302,9 @@ def banner(img, center, txt, fnt, scale, angle=-2.5):
                     int(center[1] - lay.height / 2)), lay)
 
 
-def draw_marquee(img, mq, t):
-    y, bh = mq.get("y", 1752), 68
+def draw_marquee(img, mq, t, geo=None):
+    bh = 68
+    y = int(geo.cy + geo.ch - bh) if geo else mq.get("y", 1752)
     fnt = font(F_HEI, 42)
     d = ImageDraw.Draw(img)
     d.rectangle([0, y, W, y + bh], fill=(214, 32, 32))
@@ -338,7 +350,8 @@ def style_rustic(img, t, cfg, geo):
     bn = cfg.get("banner")
     if bn and bn["t0"] <= t < bn["t1"]:
         p = clamp01((t - bn["t0"]) / 0.4)
-        banner(img, (W // 2, 168), bn["txt"], font(F_HEI, 86), ease_out_back(p))
+        banner(img, (W // 2, 168), bn["txt"], font(F_HEI, 86),
+               ease_out_back(p), max_w=W - 130)
 
     hk = cfg.get("hook")
     if hk and hk["t0"] <= t < hk["t1"]:
@@ -359,7 +372,7 @@ def style_rustic(img, t, cfg, geo):
 
     mq = cfg.get("marquee")
     if mq and t >= mq.get("t0", 0):
-        draw_marquee(img, mq, t)
+        draw_marquee(img, mq, t, geo)
 
     ec = cfg.get("end")
     if ec and t >= ec["t0"]:
