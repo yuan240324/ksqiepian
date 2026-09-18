@@ -287,6 +287,52 @@ python pro_edit/render_native.py <raw.mp4> <out.mp4> <plan.json>
 往下让，靠 `check_native.py` 在渲染前拦下越界。详见
 [`docs/08-快手三风格切片.md`](docs/08-快手三风格切片.md) 5.3 节。
 
+### 6.4 第四版：pro_edit/run_comedy.py（搞笑版）
+
+需求："**我想要的是搞笑的 注意是搞笑**"——前三版的问题不是不好看，而是
+**只有包装、没有笑点**。第四版换思路：把喜剧做进节奏和表演里。
+
+```powershell
+python pro_edit/check_comedy.py plan_com_variety.json plan_com_commentary.json plan_com_rustic.json
+python pro_edit/run_comedy.py            # 三条一次跑完（或 run_comedy.py 01 只渲一条）
+```
+
+喜剧结构（三条共用）——**三幕破功曲线**：
+
+```text
+第一幕 装镇定   → 抖字幅度小（amp=6）
+第二幕 开始崩   → 抖字 amp=9，音效接"唱片急停"，打脸感（"我上我也行" → "对不起 是我菜"）
+第三幕 彻底摆烂 → 抖字 amp=12，盖章"已老实/摆烂"，反讽收尾（tada 下行三和弦）
+```
+
+新增能力：
+
+| 能力 | 说明 |
+| --- | --- |
+| 喜剧视觉原语 ×5 | `jitter_text` 抖字 / `stamp` 盖章 / `big_arrow` 手绘箭头 / `face_circle` 手绘圈 / `draw_caption_strip` 黑底吐槽条 |
+| 渲染分支 ×4 | `circles` / `arrows` / `jitters` / `stamps`，全部由 plan JSON 驱动 |
+| 喜剧音效 ×5 | `bumble` 长号下滑 / `slip` 呲溜 / `hehe` 嘿嘿嘿 / `record` 唱片急停 / `tada` 反讽三和弦 |
+| 喜剧底乐 `bgm_comedy` | 大跳音程乱跳、每 7 个音空一拍、句尾走音下滑 —— 刻意"卡壳感" |
+| 安全区预检 `check_comedy.py` | 在 `check_native.py` 基础上把抖字/盖章/圈重点/箭头一并纳入越界检查 |
+
+搞笑版成品：
+
+| 成品 | 素材 | 输出尺寸 | 片长 | 大小 |
+| --- | --- | --- | --- | --- |
+| 01_憋笑挑战_搞笑版 | 9/13 笑场 | 1440x1800 | 34.0s | 42.0 MB |
+| 02_嘴硬翻车_搞笑版 | 9/16 团战 | 1280x960 | 34.0s | 21.5 MB |
+| 03_开播事故_搞笑版 | 9/16 社死 | 1280x960 | 31.0s | 17.2 MB |
+
+**这一版最容易踩的坑：圈重点圈到了游戏 UI 上。** 这两条素材都是"游戏画面 + 真人小窗"
+的分屏布局，主播的脸不在画面中心。实测坐标：
+
+```text
+9/13 竖屏 1440x1800   脸 ≈ (0.33, 0.80)   真人实拍区从约 50% 高度开始
+9/16 横屏 1280x960    脸 ≈ (0.10, 0.88)   真人小窗在左下角
+```
+
+详见 [`docs/08-快手三风格切片.md`](docs/08-快手三风格切片.md) 5.4 / 5.5 节。
+
 ---
 
 ## 7. 文档
@@ -300,7 +346,7 @@ python pro_edit/render_native.py <raw.mp4> <out.mp4> <plan.json>
 | [`docs/05-踩坑记录.md`](docs/05-踩坑记录.md) | 精简版 ffmpeg 的坑、PyAV API 差异、编码问题 |
 | [`docs/06-故障背景.md`](docs/06-故障背景.md) | NTFS MFT 损坏排查与为什么转向官方回放 |
 | [`docs/07-自动切片.md`](docs/07-自动切片.md) | 精彩片段打分、stream-copy 切割、时间戳归零 |
-| [`docs/08-快手三风格切片.md`](docs/08-快手三风格切片.md) | 三风格渲染引擎、9:16 构图、mux EINVAL 修复 |
+| [`docs/08-快手三风格切片.md`](docs/08-快手三风格切片.md) | 三风格渲染引擎、9:16 构图、mux EINVAL 修复、原比例安全区、搞笑版喜剧原语 |
 
 ---
 
@@ -344,6 +390,15 @@ m3u8 分片     1293 个
 安全区        竖屏右侧 160px 纯黑、顶部 96px 平台栏 → 预检拦截
 混音          orig/bgm/sfx 三段，峰值归一化 0.840
 渲染耗时      约 17 分钟 / 三条
+── 三风格成片 v4 搞笑版（2026-09-18）──
+憋笑挑战      9/13 笑场   34.0s  1020 帧  42.0 MB  1440x1800
+嘴硬翻车      9/16 团战   34.0s  1020 帧  21.5 MB  1280x960
+开播事故      9/16 社死   31.0s   930 帧  17.2 MB  1280x960
+输出规格      素材原始分辨率（不裁切）@ 30fps  H.264 + AAC
+喜剧元素      抖字/盖章/圈重点/手绘箭头（圈重点已校正到主播脸部）
+喜剧音效      5 个新增音效 + bgm_comedy 喜剧底乐
+混音          orig/bgm/sfx 三段，峰值归一化 0.840
+渲染耗时      约 20 分钟 / 三条
 ```
 
 ---
@@ -376,21 +431,26 @@ ksqiepian/
 │   ├── cfg_commentary.json 解说盘点风配置
 │   ├── cfg_rustic.json   土味老铁风配置
 │   └── sheet.py          帧目录 → 联系表（成片核对用）
-├── pro_edit/             快手成片包装 v2 增强版 / v3 原比例版（step 12）
+├── pro_edit/             快手成片包装 v2 增强版 / v3 原比例版 / v4 搞笑版（step 12）
 │   ├── render_pro.py     ★ v2 节拍驱动渲染器（裁满屏构图）
-│   ├── render_native.py  ★ v3 原比例渲染器（不裁切 + 分段小标题）
+│   ├── render_native.py  ★ v3/v4 原比例渲染器（不裁切 + 分段小标题 + 喜剧元素）
 │   ├── check_native.py   v3 安全区预检（渲染前拦截越界）
-│   ├── sfx.py            音效合成库（8 种）
+│   ├── check_comedy.py   v4 增强预检（含抖字/盖章/圈重点/箭头）
+│   ├── run_comedy.py     ★ v4 批量渲染入口（三条一次跑完）
+│   ├── sfx.py            音效合成库（8 种 + 5 种喜剧音效 + 4 条 BGM 风格）
 │   ├── audiomix.py       混音器（原声闪避 + BGM + 音效）
 │   ├── vfx.py            视觉特效（震屏/推近/闪白/暗角/调色）
-│   ├── tex.py            文字特效（渐变花字/逐字弹跳/打字机）
+│   ├── tex.py            文字特效（渐变花字/逐字弹跳/打字机 + 喜剧原语 5 个）
 │   ├── grab_frames.py    抽帧核对工具
 │   ├── plan_variety.json 综艺风编排
 │   ├── plan_commentary.json 解说风编排
 │   ├── plan_rustic.json  土味风编排
 │   ├── plan_n_variety.json   综艺风原比例编排（含 segments）
 │   ├── plan_n_commentary.json 解说风原比例编排
-│   └── plan_n_rustic.json    土味风原比例编排
+│   ├── plan_n_rustic.json    土味风原比例编排
+│   ├── plan_com_variety.json    搞笑版·憋笑挑战编排
+│   ├── plan_com_commentary.json 搞笑版·嘴硬翻车编排
+│   └── plan_com_rustic.json     搞笑版·开播事故编排
 ├── verify/               完整性验证脚本
 │   ├── verify_full.py
 │   ├── verify_audio.py

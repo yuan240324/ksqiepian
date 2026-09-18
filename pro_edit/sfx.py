@@ -163,9 +163,104 @@ def tick(dur=0.09, f=1400):
     return _norm(_fade(a), 0.4)
 
 
+def bumble(dur=0.65, seed=21):
+    """喜剧"嗡嗡"下滑：卡通里摔倒/尴尬的标配长号声（wah-wah 感）。
+
+    锯齿波做低音滑音 + 轻微颤音，尾巴向下掉音，听感滑稽。
+    """
+    t = _t(dur)
+    n = len(t)
+    # 音高：前 60% 稳住，后 40% 下滑一个半音阶
+    k = np.clip(t / (dur * 0.6), 0, 1)
+    fr = 220.0 * np.where(k < 1, 1.0, 1.0) * (0.84 ** np.clip((t - dur * 0.6) / (dur * 0.4), 0, 1))
+    fr = fr * (1 + 0.035 * np.sin(2 * np.pi * 5.2 * t))
+    ph = 2 * np.pi * np.cumsum(fr) / SR
+    # 锯齿波：谐波递减叠加，模拟铜管
+    saw = np.zeros(n)
+    for h in range(1, 9):
+        saw += (1.0 / h) * np.sin(h * ph)
+    env = np.exp(-2.2 * t) * np.clip(t / 0.05, 0, 1)
+    return _norm(_fade(saw * env), 0.55)
+
+
+def slip(dur=0.42, f0=1500, f1=240, seed=23):
+    """"呲溜"下滑哨音：打脸/翻车瞬间。"""
+    t = _t(dur)
+    fr = f0 * (f1 / f0) ** (t / dur)
+    ph = 2 * np.pi * np.cumsum(fr) / SR
+    a = np.sin(ph) * np.exp(-6.5 * t)
+    rng = np.random.default_rng(seed)
+    hiss = rng.standard_normal(len(t)) * np.exp(-26 * t) * 0.14
+    return _norm(_fade(a + hiss), 0.5)
+
+
+def hehe(dur=1.25, f=330, seed=25):
+    """憋笑/偷笑：一串不规律的短促脉冲，像气声"嘿嘿嘿"。"""
+    n = int(SR * dur)
+    out = np.zeros(n)
+    rng = np.random.default_rng(seed)
+    gaps = [0.0, 0.19, 0.41, 0.58, 0.80, 1.02]
+    for i, ts in enumerate(gaps):
+        ln = 0.14
+        tt = _t(ln)
+        if len(tt) == 0:
+            break
+        fq = f * (1 + rng.uniform(-0.07, 0.09))
+        tone = (np.sin(2 * np.pi * fq * tt) + 0.3 * np.sin(2 * np.pi * fq * 2 * tt))
+        noise = rng.standard_normal(len(tt))
+        # 气声成分：带通噪声近似（一阶低通后的噪声）
+        y, prev = np.zeros(len(tt)), 0.0
+        al = np.exp(-2 * np.pi * 1100 / SR)
+        for j in range(len(tt)):
+            prev = al * prev + (1 - al) * noise[j]
+            y[j] = prev
+        env = np.exp(-13 * tt) * np.clip(tt / 0.02, 0, 1)
+        _add(out, (tone * 0.7 + y * 0.5) * env * 0.5, ts)
+    return _norm(_fade(out, 15), 0.48)
+
+
+def record(dur=1.15, seed=27):
+    """唱片刮擦/急停："叽——"的高频噪声扫，用于"节目效果"突然反转。"""
+    t = _t(dur)
+    n = len(t)
+    rng = np.random.default_rng(seed)
+    noise = rng.standard_normal(n)
+    y, prev = np.zeros(n), 0.0
+    for i in range(n):
+        f = 900 + 2600 * (1 - (i / float(n)) ** 0.7)
+        al = np.exp(-2 * np.pi * f / SR)
+        prev = al * prev + (1 - al) * noise[i]
+        y[i] = prev
+    env = np.clip(t / 0.03, 0, 1) * np.exp(-3.0 * t)
+    return _norm(_fade(y * env), 0.5)
+
+
+def tada(dur=1.25, seed=29):
+    """反讽"当当当——"：三个下行和弦，用于"就这？"式收尾。
+
+    与 rise 相反，这里刻意做成下行的"庆祝失败"感。
+    """
+    n = int(SR * dur)
+    out = np.zeros(n)
+    # 大三和弦根音下行：C -> A -> F（滑稽的"没救了"）
+    notes = [(523.25, 392.00, 329.63), (440.00, 349.23, 261.63), (349.23, 261.63, 220.00)]
+    for i, (a, b, c) in enumerate(notes):
+        ts = i * 0.34
+        ln = dur - ts
+        tt = _t(ln)
+        if len(tt) == 0:
+            break
+        tone = (np.sin(2 * np.pi * a * tt) + 0.8 * np.sin(2 * np.pi * b * tt)
+                + 0.7 * np.sin(2 * np.pi * c * tt))
+        env = np.exp(-3.4 * tt) * np.clip(tt / 0.012, 0, 1)
+        _add(out, tone * env * 0.30, ts)
+    return _norm(_fade(out, 20), 0.6)
+
+
 SFX = {
     "whoosh": whoosh, "ding": ding, "boom": boom, "wow": wow,
     "clap": clap, "drumroll": drumroll, "rise": rise, "sub": sub, "tick": tick,
+    "bumble": bumble, "slip": slip, "hehe": hehe, "record": record, "tada": tada,
 }
 
 
@@ -300,6 +395,55 @@ def bgm_rustic(dur, bpm=126, seed=17):
     return _norm(_fade(out, 40), 0.30)
 
 
+def bgm_comedy(dur, bpm=118, seed=31):
+    """喜剧底乐：大跳音程 + 停顿 + 滑音，专门给"搞笑切片"用。
+
+    与 uplifting（一路欢快）不同，这里刻意制造"卡壳"感：
+    旋律按"三连跳 + 突然停一拍 + 一个小下滑"循环，听起来更滑稽。
+    另外加木鱼感的打点，强化喜剧节奏。
+    """
+    n = int(SR * dur)
+    out = np.zeros(n)
+    beat = 60.0 / bpm
+    # 大跳：C4 - G4 - E4 - C5 - A4 - F4，跳进大、方向乱，制造笨拙感
+    mel = [261.63, 392.00, 329.63, 523.25, 440.00, 349.23, 293.66, 466.16]
+    rng = np.random.default_rng(seed)
+    step = beat / 2.0
+    k = 0
+    ts = 0.0
+    while ts < dur:
+        # 每 6 个音后空一拍（喜剧的"停顿"）
+        if k % 7 == 6:
+            ts += step
+            k += 1
+            continue
+        f = mel[k % len(mel)]
+        # 最后一个音做下滑（吹奏走音感）
+        slide = (k % 7 == 5)
+        ln = min(step * (1.9 if slide else 1.15), dur - ts)
+        tt = _t(ln)
+        if len(tt) == 0:
+            break
+        if slide:
+            fr = f * (1.0 - 0.16 * np.clip(tt / ln, 0, 1))
+        else:
+            fr = np.full(len(tt), f)
+        ph = 2 * np.pi * np.cumsum(fr) / SR
+        note = (np.sin(ph) + 0.35 * np.sin(2 * ph) + 0.12 * np.sin(3 * ph))
+        note = note * np.exp(-5.0 * tt) * np.clip(tt / 0.012, 0, 1) * 0.20
+        _add(out, note, ts)
+        # 木鱼打点（每拍一下，短促噪声）
+        if k % 2 == 0:
+            click = rng.standard_normal(int(SR * 0.035)) * np.exp(
+                -np.linspace(0, 26, int(SR * 0.035))) * 0.10
+            _add(out, click, ts)
+        if k % 4 == 0:
+            _add(out, sub(0.16, 64) * 0.5, ts)
+        ts += step
+        k += 1
+    return _norm(_fade(out, 40), 0.30)
+
+
 def _add(dst, src, t0):
     """把 src 叠加到 dst 的 t0 秒处，越界自动裁剪。"""
     i = int(SR * t0)
@@ -312,7 +456,8 @@ def _add(dst, src, t0):
     dst[i:j] += src[:j - i]
 
 
-BGM = {"variety": bgm_uplifting, "commentary": bgm_cinematic, "rustic": bgm_rustic}
+BGM = {"variety": bgm_uplifting, "commentary": bgm_cinematic,
+       "rustic": bgm_rustic, "comedy": bgm_comedy}
 
 
 def make_bgm(style, dur):

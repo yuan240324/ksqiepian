@@ -289,6 +289,42 @@ def main():
                                cps=it.get("cps", 14.0), fill=(255, 255, 255),
                                stroke=(0, 0, 0), sw=4)
 
+        # 10b) 圈重点（手绘圈）
+        for it in plan.get("circles", []):
+            if it["t"] <= t < it["t"] + it.get("dur", 2.4):
+                tex.face_circle(img, int(W * it.get("x", 0.5)), int(H * it.get("y", 0.58)),
+                                int(it.get("r", 130)), t, it["t"],
+                                dur=it.get("dur", 2.4), sw=it.get("sw", 7))
+
+        # 10c) 手绘箭头
+        for it in plan.get("arrows", []):
+            if it["t"] <= t < it["t"] + it.get("dur", 1.8):
+                tex.big_arrow(img, int(W * it.get("x", 0.3)), int(H * it.get("y", 0.44)),
+                              ang=it.get("ang", 200), size=it.get("size", 100),
+                              t=t, t0=it["t"], color=tuple(it.get("color", [255, 232, 60])))
+
+        # 10d) 抖字（情绪花字）
+        for it in plan.get("jitters", []):
+            if it["t"] <= t < it["t"] + it.get("dur", 2.4):
+                al = 1.0
+                if t > it["t"] + it.get("dur", 2.4) - 0.4:
+                    al = tex.clamp01((it["t"] + it.get("dur", 2.4) - t) / 0.4)
+                tex.jitter_text(img, it["txt"], it.get("size", 80),
+                                int(W * it.get("cx", 0.5)), int(H * it.get("cy", 0.44)),
+                                t, amp=it.get("amp", 8.0), seed=it.get("seed", 7),
+                                fill=tuple(tuple(c) for c in it.get(
+                                    "fill", [[255, 252, 190], [255, 176, 40]])),
+                                alpha=al)
+
+        # 10e) 盖章判词
+        for it in plan.get("stamps", []):
+            if it["t"] <= t < it["t"] + it.get("dur", 1.5):
+                tex.stamp(img, it["txt"], int(W * it.get("x", 0.5)),
+                          int(H * it.get("y", 0.6)), t, it["t"],
+                          dur=it.get("dur", 1.5), size=it.get("size", 76),
+                          color=tuple(it.get("color", [214, 30, 40])),
+                          rot0=it.get("rot", -16.0))
+
         # 11) 跑马灯
         mq = plan.get("marquee")
         if mq and t >= mq.get("t0", 0):
